@@ -1,8 +1,9 @@
 class Node:
-    def __init__(self, data=None, next_node=None):
+    def __init__(self, data=None, value=None, next_node=None):
         assert (data is not None)
         assert (isinstance(next_node, Node) or next_node is None)
         self.data = data
+        self.value = value
         self.next = next_node
 
     def __eq__(self, other):

@@ -20,26 +20,26 @@ class MyHashTable:
         self.fill_threshold = fill_threshold
         self.scaling_factor = scaling_factor
 
-    def add(self, key):
+    def add(self, key, value=None):
         if self.key_count > 0.7 * self.arr_len:
             new_len = self.arr_len * self.scaling_factor
             temp_arr = [None] * new_len
             for ll in self.array:
                 if ll is not None:
                     for elem in ll:
-                        self.__add_to_list(temp_arr, elem.data, new_len)
+                        self.__add_to_list(temp_arr, elem.data, elem.value, new_len)
             self.array = temp_arr
             self.arr_len = new_len
-            self.add(key)
+            self.add(key, value)
         else:
-            self.__add_to_list(self.array, key, self.arr_len)
+            self.__add_to_list(self.array, key, value, self.arr_len)
             self.key_count += 1
         return self
 
     @staticmethod
-    def __add_to_list(array, key, length):
+    def __add_to_list(array, key, value, length):
         new_key = str_to_int(key, length)
-        curr_node = Node(key)
+        curr_node = Node(key, value)
         if array[new_key] is None:
             array[new_key] = MyLinkedList(curr_node)
         else:
@@ -53,5 +53,5 @@ class MyHashTable:
             print(i, ll)
 
 
-ht = MyHashTable(1, 2, 2).add(2).add(5).add(5).add(8).add(9).add(10)
+ht = MyHashTable(1, 2, 2).add(2).add(5, "fff").add(5, "wr").add(8, "ggg").add(9, "efr").add(10, "rf")
 ht.print()
