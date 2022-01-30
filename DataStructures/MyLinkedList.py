@@ -8,9 +8,13 @@ class Node:
     def __eq__(self, other):
         return self.data == other.data
 
+    def has_next(self):
+        return self.next is not None
+
 
 class MyLinkedList:
     def __init__(self, head=None):
+        assert (isinstance(head, Node) or head is None)
         if head is not None:
             self.head = head
             self.tail = head
@@ -105,6 +109,15 @@ class MyLinkedList:
             return True
         return False
 
+    def __iter__(self):
+        if self.head is None:
+            raise StopIteration
+        curr = self.head
+        yield curr
+        while curr.has_next():
+            curr = curr.next
+            yield curr
+
 
 if __name__ == '__main__':
     ll = MyLinkedList().append_values([5, 1, 2, 3, 4, 5, 6, 7])
@@ -118,3 +131,6 @@ if __name__ == '__main__':
     ll2 = MyLinkedList().append_values([1, 3, 4, 5, 6])
 
     print(ll == ll2)
+
+    for node in ll:
+        print(node.data)
