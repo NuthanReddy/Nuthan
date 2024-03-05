@@ -12,6 +12,9 @@ class Node:
     def has_next(self):
         return self.next is not None
 
+    def __str__(self):
+        return str(self.data)
+
 
 class MyLinkedList:
     def __init__(self, head=None):
@@ -135,3 +138,6 @@ if __name__ == '__main__':
 
     for node in ll:
         print(node.data)
+
+    f = Node(3, Node(7))
+    print(f)
