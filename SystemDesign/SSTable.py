@@ -1,8 +1,12 @@
-import pyspark.sql
-from pyspark.sql.functions import *
+# keep a map of key to data location in memory
 
-sc = pyspark.SparkContext()
-data_rdd = sc.parallelize([(1, "foo"), (1, "bar"), (2, "foobar")])
-df = data_rdd.toDF()
+# as key values come, and not greater than the max size, keep adding to the memstore
+# when the memstore is full, write to disk
 
-df.groupBy("_2").agg(collect_list("_1").alias("_1")).explain()
+# when reading, check the memstore first, then the disk
+# the size of ss table is small such that the search is fast
+
+# compaction is done based on multiple policies, slab based or time based or size based or a combination of these
+# the compaction is done in the background, and the read and write operations are not blocked
+
+
