@@ -3,13 +3,13 @@ from collections import defaultdict
 import math
 
 
-user_ids = ["user"+str(x) for x in range(100)]
-no_of_nodes = 10
+user_ids = ["user"+str(x) for x in range(1000)]
+no_of_nodes = 100
 
 user_server_map = defaultdict(set)
 server_list = [""]*1000
 
-# map servers to a range of 100
+# map servers to a range of 1000
 for i in range(no_of_nodes):
     random.seed(i)
     server_list[random.randint(0, 999)] = "server"+str(i)
@@ -19,11 +19,11 @@ for i in range(no_of_nodes):
     server_list[random.randint(0, 999)] = "server"+str(i)
 
 
-# print(server_list)
+print([(i, server) for i, server in enumerate(server_list) if server != ""])
 
 # assuming every user sends 1000 requests
-for _ in range(100):
-    for i in range(100):
+for _ in range(1000):
+    for i in range(1000):
         random.seed(user_ids[i])
         orig_pick = random.randint(0, 999)
         pick = orig_pick
@@ -46,14 +46,17 @@ for k, v in user_server_map.items():
         server1_users.append(k)
         print(k, v)
 
+
+print("server1_users:", server1_users)
+
 # remove server1 entries in server_list and replace with ""
 server_list = ["" if x == "server1" else x for x in server_list]
 # print(server_list)
 user_server_map2 = defaultdict(set)
 
 # send another 1000 request
-for _ in range(100):
-    for i in range(100):
+for _ in range(1000):
+    for i in range(1000):
         random.seed(user_ids[i])
         orig_pick = random.randint(0, 999)
         pick = orig_pick

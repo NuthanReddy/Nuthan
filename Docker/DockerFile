@@ -1,0 +1,14 @@
+# Start with a minimal Alpine Linux image
+FROM alpine:latest
+
+# Install necessary packages (optional)
+RUN apk add --no-cache bash curl
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the current directory contents to the container
+COPY . /app
+
+# Specify the default command to run
+CMD ["echo", "Hello from an Alpine-based container!"]
