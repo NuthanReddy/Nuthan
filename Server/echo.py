@@ -1,24 +1,32 @@
 import socket
 
 
-def start_echo_server(host='localhost', port=12345):
+def start_http_server(host='localhost', port=8080):
     # Create a socket object
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
     server_socket.listen(5)  # Start listening for incoming connections
-    print(f"Echo server started on {host}:{port}")
+    print(f"HTTP server started on {host}:{port}")
 
     try:
         while True:
-            # Accept incoming connections
+            # Accept an incoming connection
             client_socket, client_address = server_socket.accept()
             print(f"Connection established with {client_address}")
 
-            # Receive data and echo it back
-            data = client_socket.recv(1024)
-            if data:
-                print(f"Received: {data.decode('utf-8')}")
-                client_socket.sendall(data)  # Echo back the received data
+            # Receive request data
+            request_data = client_socket.recv(1024).decode('utf-8')
+            print(f"Request:\n{request_data}")
+
+            # Send a simple HTTP response
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "Content-Length: 13\r\n"
+                "\r\n"
+                "Hello, World!"
+            )
+            client_socket.sendall(response.encode('utf-8'))
 
             # Close the client connection
             client_socket.close()
@@ -28,6 +36,6 @@ def start_echo_server(host='localhost', port=12345):
         server_socket.close()
 
 
-# Run the echo server
+# Run the HTTP server
 if __name__ == '__main__':
-    start_echo_server()
+    start_http_server()
