@@ -4,7 +4,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from SystemDesign.ConsistentHashing import ConsistentHashRing, Node
+from SystemDesign.Utils.ConsistentHashing import ConsistentHashRing, Node
 
 
 class TestConsistentHashRing:

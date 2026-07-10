@@ -22,7 +22,7 @@ Methodology:
 
 Repository-specific guidance:
 - Watch for top-level executable code in `SystemDesign/` and other scripts before importing modules
-- Be careful with side-effect modules like `SystemDesign/RateLimiter.py`
+- Be careful with side-effect modules; e.g. `SystemDesign/Utils/RateLimiter.py` (its import-time packet loop is now guarded by `if __name__ == "__main__"`)
 - Keep fixes scoped to one domain folder unless user asks for broader cleanup
 - Use pytest where tests exist; otherwise run the local script path
 

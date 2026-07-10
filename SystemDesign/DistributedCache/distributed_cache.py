@@ -2,20 +2,22 @@
 Distributed Cache (Redis-like) — Simulation
 ============================================
 Demonstrates:
-  - CacheNode with LRU eviction and TTL expiration
+  - CacheNode with LRU eviction and TTL expiration (thread-safe)
   - CacheCluster with consistent hashing (virtual nodes)
   - GET / SET / DELETE operations across the cluster
+  - Publish/subscribe messaging (Redis-style channels)
   - Eviction and expiration statistics
 """
 
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
 from bisect import bisect_right, insort
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +55,10 @@ class CacheNode:
         self.node_id = node_id
         self.max_keys = max_keys
         self._store: OrderedDict[str, CacheEntry] = OrderedDict()
+        # Guards _store and the stat counters so a node can be shared
+        # safely across worker threads. RLock lets public methods call
+        # internal helpers (_remove/_evict_lru) without self-deadlock.
+        self._lock = threading.RLock()
 
         # stats
         self.hits = 0
@@ -66,91 +72,98 @@ class CacheNode:
 
     def get(self, key: str) -> Optional[Any]:
         """Retrieve a value by key.  Returns None on miss or expiry."""
-        entry = self._store.get(key)
-        if entry is None:
-            self.misses += 1
-            return None
-        if entry.is_expired():
-            self._remove(key)
-            self.expirations += 1
-            self.misses += 1
-            return None
-        # promote to most-recently-used end
-        self._store.move_to_end(key)
-        entry.touch()
-        self.hits += 1
-        return entry.value
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                self.misses += 1
+                return None
+            if entry.is_expired():
+                self._remove(key)
+                self.expirations += 1
+                self.misses += 1
+                return None
+            # promote to most-recently-used end
+            self._store.move_to_end(key)
+            entry.touch()
+            self.hits += 1
+            return entry.value
 
     def set(self, key: str, value: Any, ttl_seconds: Optional[float] = None) -> None:
         """Insert or update a key.  Evicts LRU entries if capacity exceeded."""
         expire_at = (time.time() + ttl_seconds) if ttl_seconds else None
 
-        if key in self._store:
-            # update in-place, promote to MRU
-            entry = self._store[key]
-            entry.value = value
-            entry.expire_at = expire_at
-            entry.touch()
-            self._store.move_to_end(key)
-        else:
-            # evict if at capacity
-            while len(self._store) >= self.max_keys:
-                self._evict_lru()
-            self._store[key] = CacheEntry(key=key, value=value, expire_at=expire_at)
+        with self._lock:
+            if key in self._store:
+                # update in-place, promote to MRU
+                entry = self._store[key]
+                entry.value = value
+                entry.expire_at = expire_at
+                entry.touch()
+                self._store.move_to_end(key)
+            else:
+                # evict if at capacity
+                while len(self._store) >= self.max_keys:
+                    self._evict_lru()
+                self._store[key] = CacheEntry(key=key, value=value, expire_at=expire_at)
 
-        self.sets += 1
+            self.sets += 1
 
     def delete(self, key: str) -> bool:
         """Explicitly remove a key.  Returns True if the key existed."""
-        if key in self._store:
-            self._remove(key)
-            self.deletes += 1
-            return True
-        return False
+        with self._lock:
+            if key in self._store:
+                self._remove(key)
+                self.deletes += 1
+                return True
+            return False
 
     def keys(self) -> list[str]:
         """Return all non-expired keys (triggers lazy expiration)."""
-        expired = [k for k, e in self._store.items() if e.is_expired()]
-        for k in expired:
-            self._remove(k)
-            self.expirations += 1
-        return list(self._store.keys())
+        with self._lock:
+            expired = [k for k, e in self._store.items() if e.is_expired()]
+            for k in expired:
+                self._remove(k)
+                self.expirations += 1
+            return list(self._store.keys())
 
     def active_expire_sweep(self, sample_size: int = 20) -> int:
         """
         Active expiration: sample random keys and delete expired ones.
         Returns the number of keys expired in this sweep.
         """
-        all_keys = list(self._store.keys())
-        if not all_keys:
-            return 0
-
         import random
-        sample = random.sample(all_keys, min(sample_size, len(all_keys)))
-        count = 0
-        for k in sample:
-            entry = self._store.get(k)
-            if entry and entry.is_expired():
-                self._remove(k)
-                self.expirations += 1
-                count += 1
-        return count
+
+        with self._lock:
+            all_keys = list(self._store.keys())
+            if not all_keys:
+                return 0
+
+            sample = random.sample(all_keys, min(sample_size, len(all_keys)))
+            count = 0
+            for k in sample:
+                entry = self._store.get(k)
+                if entry and entry.is_expired():
+                    self._remove(k)
+                    self.expirations += 1
+                    count += 1
+            return count
 
     def stats(self) -> dict[str, Any]:
-        total_ops = self.hits + self.misses
-        hit_ratio = (self.hits / total_ops * 100) if total_ops else 0.0
-        return {
-            "node_id": self.node_id,
-            "keys_stored": len(self._store),
-            "max_keys": self.max_keys,
-            "hits": self.hits,
-            "misses": self.misses,
-            "hit_ratio_pct": round(hit_ratio, 2),
-            "evictions": self.evictions,
-            "expirations": self.expirations,
-            "sets": self.sets,
-            "deletes": self.deletes,
-        }
+        with self._lock:
+            total_ops = self.hits + self.misses
+            hit_ratio = (self.hits / total_ops * 100) if total_ops else 0.0
+            return {
+                "node_id": self.node_id,
+                "keys_stored": len(self._store),
+                "max_keys": self.max_keys,
+                "hits": self.hits,
+                "misses": self.misses,
+                "hit_ratio_pct": round(hit_ratio, 2),
+                "evictions": self.evictions,
+                "expirations": self.expirations,
+                "sets": self.sets,
+                "deletes": self.deletes,
+            }
 
     # -- internals ----------------------------------------------------------
 
@@ -241,6 +254,11 @@ class CacheCluster:
     def __init__(self, virtual_nodes: int = 150) -> None:
         self.ring = ConsistentHashRing(virtual_nodes=virtual_nodes)
         self._nodes: dict[str, CacheNode] = {}
+        # Pub/Sub: channel name -> list of subscriber callbacks.
+        # Guarded by its own lock so publishing from one thread while
+        # another subscribes is safe.
+        self._channels: dict[str, list[Callable[[str, Any], None]]] = {}
+        self._pubsub_lock = threading.RLock()
 
     def add_node(self, node: CacheNode) -> None:
         self._nodes[node.node_id] = node
@@ -283,6 +301,41 @@ class CacheCluster:
             "total_expirations": sum(s["expirations"] for s in per_node.values()),
             "per_node": per_node,
         }
+
+    # -- pub/sub ------------------------------------------------------------
+
+    def subscribe(self, channel: str, callback: Callable[[str, Any], None]) -> None:
+        """Register *callback* to receive every message published to *channel*.
+
+        The callback is invoked as ``callback(channel, message)``.  This mirrors
+        Redis SUBSCRIBE and is independent of the key/value store above.
+        """
+        with self._pubsub_lock:
+            self._channels.setdefault(channel, []).append(callback)
+
+    def unsubscribe(self, channel: str, callback: Callable[[str, Any], None]) -> bool:
+        """Remove a previously registered *callback*.  Returns True if removed."""
+        with self._pubsub_lock:
+            subscribers = self._channels.get(channel)
+            if not subscribers or callback not in subscribers:
+                return False
+            subscribers.remove(callback)
+            if not subscribers:
+                del self._channels[channel]
+            return True
+
+    def publish(self, channel: str, message: Any) -> int:
+        """Publish *message* to all subscribers of *channel* (fan-out).
+
+        Returns the number of subscribers that received the message.  A copy of
+        the subscriber list is taken under the lock so callbacks run without
+        holding it (a slow/faulty subscriber can't block publishers).
+        """
+        with self._pubsub_lock:
+            subscribers = list(self._channels.get(channel, []))
+        for callback in subscribers:
+            callback(channel, message)
+        return len(subscribers)
 
     # -- internals ----------------------------------------------------------
 
@@ -379,6 +432,16 @@ def demo() -> None:
     for key in ["user:1", "user:5", "user:10"]:
         new_node = cluster.ring.get_node(key)
         print(f"  {key:10s} now routes to {new_node}")
+
+    # ---- 9. Publish/Subscribe ---------------------------------------------
+    _print_section("9. Publish/Subscribe (cache invalidation channel)")
+    received: list[str] = []
+    cluster.subscribe("invalidate", lambda ch, msg: received.append(msg))
+    cluster.subscribe("invalidate", lambda ch, msg: print(f"  [subscriber] {ch}: {msg}"))
+    delivered = cluster.publish("invalidate", "user:1")
+    delivered += cluster.publish("invalidate", "user:5")
+    print(f"  Published 2 messages, each delivered to {delivered // 2} subscribers")
+    print(f"  Collector received: {received}")
 
     print("\n--- Demo complete ---\n")
 

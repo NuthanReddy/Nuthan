@@ -24,7 +24,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import IntEnum, Enum
 from typing import Any, Optional
 
@@ -85,6 +85,10 @@ class UserPreference:
     enabled_channels: dict[ChannelType, bool] = field(default_factory=dict)
     quiet_start_hour: Optional[int] = None
     quiet_end_hour: Optional[int] = None
+    # Quiet hours are interpreted in the user's local time. Stored as a fixed
+    # UTC offset in hours (e.g. -5 for US Eastern, +5.5 for IST) to stay
+    # dependency-free and correct on platforms without an IANA tz database.
+    utc_offset_hours: float = 0.0
     frequency_caps: dict[ChannelType, int] = field(default_factory=dict)
     opted_out_categories: set[str] = field(default_factory=set)
 
@@ -350,9 +354,11 @@ class NotificationService:
         if category in pref.opted_out_categories:
             return False, f"user opted out of category '{category}'"
 
-        # Quiet hours (simplified: uses current hour)
+        # Quiet hours, evaluated in the user's local time (UTC + offset).
         if pref.quiet_start_hour is not None and pref.quiet_end_hour is not None:
-            current_hour = datetime.utcnow().hour
+            utc_now = datetime.now(timezone.utc)
+            local_now = utc_now + timedelta(hours=pref.utc_offset_hours)
+            current_hour = local_now.hour
             start, end = pref.quiet_start_hour, pref.quiet_end_hour
             in_quiet = False
             if start > end:  # crosses midnight

@@ -204,7 +204,6 @@ class BookingService:
         self.shows: Dict[str, Show] = {}
         self.holds: Dict[str, SeatHold] = {}
         self.bookings: Dict[str, Booking] = {}
-        self._global_lock = threading.Lock()
 
     def register_show(self, show: Show) -> None:
         self.shows[show.show_id] = show

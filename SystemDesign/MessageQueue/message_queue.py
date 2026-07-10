@@ -193,10 +193,17 @@ class Topic:
 
     def get_partition(self, key: Optional[str]) -> Partition:
         """
-        Select a partition for a message.
+        Select a partition for a message by key.
 
-        If a key is provided, consistently hashes it to a partition.
-        Otherwise returns None (caller should use round-robin).
+        If a key is provided, it is consistently hashed (MD5) to a partition so
+        that all messages sharing a key land on the same partition (preserving
+        per-key ordering).
+
+        If ``key`` is None this returns partition 0 as a deterministic fallback.
+        Note: the ``Producer`` never relies on that fallback for keyless
+        messages — it round-robins across partitions itself (see
+        ``Producer.send``), which is why the return type is always a
+        ``Partition`` rather than ``Optional[Partition]``.
         """
         if key is not None:
             h = int(hashlib.md5(key.encode()).hexdigest(), 16)

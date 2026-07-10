@@ -6,7 +6,7 @@
 
 ## Architecture and boundaries (important)
 - `DataStructures/` and `Problems/` are the core learning areas; files are generally self-contained and often executable directly (many `if __name__ == "__main__"` blocks).
-- `SystemDesign/` contains simulations/prototypes with runtime side effects at module import/execution time (example: `SystemDesign/RateLimiter.py` runs a packet loop immediately).
+- `SystemDesign/` contains simulations/prototypes with runtime side effects at module import/execution time (example: `SystemDesign/RateLimiter.py` — now `SystemDesign/Utils/RateLimiter.py` — historically ran a packet loop immediately; it is now guarded by `if __name__ == "__main__"`).
 - `SystemDesign/` also includes documentation-first domain folders with large design READMEs (example: `SystemDesign/DistributedCache/README.md`); avoid broad edits there unless requested.
 - Logging system appears in two places:
   - package-style implementation: `LLD/LoggerModule/logger/` (`logger.py`, `sinks.py`, `config_reader.py`)
